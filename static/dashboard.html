@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#18232D">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="SmartPlug">
+  <title>SmartPlug</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #F5F5F2;
+      --card: #FFFFFF;
+      --text: #17212B;
+      --dim: #66717C;
+      --line: #E3E5E3;
+      --side: #18232D;
+      --accent: #527A70;
+      --accent-soft: #E8EFEC;
+      --warn: #A9762B;
+      --bad: #A5544B;
+      --radius: 14px;
+      --shadow: 0 1px 2px rgba(24, 35, 45, 0.04);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+    i.ph { line-height: 1; }
+    .app { display: grid; grid-template-columns: 248px 1fr; min-height: 100dvh; }
+
+    /* ---------- Sidebar ---------- */
+    .side {
+      position: sticky; top: 0; height: 100dvh;
+      background: var(--side); color: #E9EEF1;
+      display: flex; flex-direction: column; padding: 30px 16px 20px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 0 12px; }
+    .brand i { font-size: 26px; color: #8DB5A9; }
+    .brand .t { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: #FFFFFF; }
+    .brand-sub { font-size: 12px; color: #93A1AB; padding: 6px 12px 0; }
+    .nav { margin-top: 24px; display: flex; flex-direction: column; gap: 4px; }
+    .nav a {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; border-radius: 10px;
+      color: #B5C0C8; text-decoration: none; font-size: 15px;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+    .nav a i { font-size: 20px; }
+    .nav a:hover { background: rgba(255, 255, 255, 0.05); color: #FFFFFF; }
+    .nav a.active { background: rgba(255, 255, 255, 0.09); color: #FFFFFF; }
+    .device {
+      margin-top: auto; padding: 14px; border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .device .top { display: flex; align-items: center; gap: 12px; }
+    .device .ico {
+      width: 38px; height: 38px; border-radius: 10px;
+      background: rgba(255, 255, 255, 0.07);
+      display: grid; place-items: center; font-size: 20px; color: #B5C0C8;
+    }
+    .device .nm { font-size: 14px; font-weight: 500; color: #FFFFFF; }
+    .device .st { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #93A1AB; margin-top: 2px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #93A1AB; display: inline-block; }
+    .device .upd { margin-top: 12px; font-size: 12px; color: #93A1AB; line-height: 1.5; }
+
+    /* ---------- Main ---------- */
+    .main { padding: 22px 28px 36px; min-width: 0; }
+    .inner { max-width: 1140px; margin: 0 auto; }
+    .head { margin-bottom: 14px; }
+    .head h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; }
+    .head p { margin: 3px 0 0; font-size: 15px; color: var(--dim); }
+    section, .anchor { scroll-margin-top: 24px; }
+
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .k { font-size: 14px; color: var(--dim); }
+    .grid { display: grid; gap: 12px; margin-bottom: 12px; }
+    .g-a { grid-template-columns: 1.75fr 1fr; }
+    .g-b { grid-template-columns: repeat(4, 1fr); }
+    .g-c { grid-template-columns: 1.75fr 1fr; align-items: stretch; }
+    .g-d { grid-template-columns: 1.75fr 1fr; align-items: stretch; }
+    .g-e { grid-template-columns: 1.75fr 1fr; align-items: start; }
+
+    /* Hero */
+    .hero { position: relative; overflow: hidden; background: #EEF3F1; border-color: #DCE6E2; min-height: 150px; }
+    .hero-art {
+      position: absolute; inset: 0 0 0 40%;
+      background-size: cover; background-position: center;
+      opacity: 0; transition: opacity 0.5s ease;
+      -webkit-mask-image: linear-gradient(to right, transparent, #000 60%);
+      mask-image: linear-gradient(to right, transparent, #000 60%);
+    }
+    .hero-art.on { opacity: 0.9; }
+    .hero-body { position: relative; padding: 16px 22px; }
+    .eyebrow { font-size: 14px; color: var(--accent); font-weight: 500; }
+    .hero-main { display: flex; align-items: center; gap: 18px; margin-top: 8px; }
+    .hero-icon {
+      width: 60px; height: 60px; border-radius: 50%; flex: none;
+      background: var(--accent-soft); color: var(--accent);
+      display: grid; place-items: center; font-size: 28px;
+    }
+    .hero-name { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+    .hero-w { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; }
+    .hero-w .unit { font-size: 20px; font-weight: 500; color: var(--dim); }
+    .hero-sub { font-size: 15px; color: var(--dim); margin-top: 2px; max-width: 360px; }
+    .status { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; }
+    .status .conf { color: var(--dim); margin-left: 8px; }
+
+    /* Current load */
+    .load { padding: 16px 22px; display: flex; flex-direction: column; }
+    .load-w { font-size: 36px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; }
+    .load-w .unit { font-size: 26px; font-weight: 500; color: var(--dim); }
+    .load-kw { font-size: 16px; color: var(--dim); margin-top: 2px; min-height: 22px; }
+    .load-foot {
+      margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line);
+      display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--dim);
+    }
+    .load-foot i { font-size: 20px; }
+
+    /* Stat cards */
+    .stat { padding: 14px 18px; }
+    .stat .lab { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--dim); }
+    .stat .lab i { font-size: 20px; color: var(--text); }
+    .stat .v { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin-top: 6px; }
+    .stat .v .unit { font-size: 16px; font-weight: 500; color: var(--dim); }
+    .stat .s { font-size: 13px; color: var(--dim); margin-top: 4px; min-height: 18px; }
+
+    /* Chart */
+    .panel { padding: 16px 20px; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .panel-title { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; }
+    .panel-title i { font-size: 20px; }
+    .tabs { display: flex; gap: 4px; }
+    .tabs button {
+      font: inherit; font-size: 13px; padding: 6px 14px; border-radius: 999px;
+      border: none; background: transparent; color: var(--dim); cursor: pointer;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+    .tabs button:hover { color: var(--text); }
+    .tabs button.on { background: var(--side); color: #FFFFFF; }
+    .chart-box { position: relative; height: 230px; margin-top: 8px; }
+    .chart-empty {
+      position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+      font-size: 14px; color: var(--dim); text-align: center; padding: 0 24px;
+    }
+
+    /* Event timeline */
+    .act-list { position: relative; margin-top: 4px; }
+    .act-list::before {
+      content: ""; position: absolute; left: 69px; top: 18px; bottom: 18px;
+      width: 1px; background: var(--line);
+    }
+    .act { position: relative; display: grid; grid-template-columns: 52px 10px 32px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 6px 0; }
+    .act .tm { font-size: 13px; color: var(--dim); line-height: 1.3; }
+    .act .tm span { display: block; font-size: 11px; }
+    .act .pt { width: 7px; height: 7px; border-radius: 50%; background: #B9C0C3; justify-self: center; position: relative; }
+    .act .pt.on { background: var(--accent); }
+    .act .pt.off { background: #B9C0C3; }
+    .act .pt.step { background: var(--warn); }
+    .act .pt.alert { background: var(--bad); }
+    .act .ic { width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 16px; }
+    .act .ic.alert { background: #F3E6E3; color: var(--bad); }
+    .act .nm { font-size: 14px; font-weight: 500; }
+    .act .dt { font-size: 12px; color: var(--dim); margin-top: 1px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .act .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .act .pw { font-size: 14px; color: var(--text); white-space: nowrap; }
+    .empty-note { font-size: 14px; color: var(--dim); padding: 18px 0 6px; line-height: 1.5; }
+
+    /* Measurements */
+    .meas { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 10px; }
+    .meas > div { padding: 2px 20px; border-left: 1px solid var(--line); }
+    .meas > div:first-child { border-left: none; padding-left: 0; }
+    .meas .ml { font-size: 13px; color: var(--dim); }
+    .meas .mv { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; }
+    .meas .mv .unit { font-size: 14px; font-weight: 500; color: var(--dim); }
+
+    /* Insight */
+    .insight { background: #EEF1EF; padding: 16px 20px; display: flex; gap: 14px; align-items: flex-start; }
+    .insight i { font-size: 24px; color: var(--accent); margin-top: 2px; }
+    .insight .it { font-size: 17px; font-weight: 600; }
+    .insight .ib { font-size: 15px; margin-top: 6px; line-height: 1.5; }
+    .insight .is { font-size: 14px; color: var(--dim); margin-top: 4px; line-height: 1.5; }
+
+    /* Energy by appliance */
+    .erow { display: grid; grid-template-columns: 32px 1fr auto; gap: 12px; align-items: center; padding: 6px 0; }
+    .erow .ic { width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 16px; }
+    .erow .nm { font-size: 14px; font-weight: 500; }
+    .ebar { height: 4px; background: var(--line); border-radius: 2px; margin-top: 7px; overflow: hidden; }
+    .ebar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+    .erow .ev { text-align: right; font-size: 15px; font-weight: 600; white-space: nowrap; }
+    .erow .es { text-align: right; font-size: 12px; color: var(--dim); margin-top: 2px; white-space: nowrap; }
+    .etotal { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 14px; color: var(--dim); }
+    .etotal b { color: var(--text); font-weight: 600; }
+    .side-block { font-size: 14px; line-height: 1.5; color: var(--text); margin-top: 8px; }
+    .side-block .m { color: var(--dim); font-size: 13px; }
+    .side-block ul { margin: 8px 0 0; padding: 0; list-style: none; }
+    .side-block li { padding: 5px 0; color: var(--dim); font-size: 13px; }
+
+    /* Live "what is this?" prompt */
+    .teach-live { display: none; gap: 14px; align-items: flex-start; padding: 18px 22px; margin-bottom: 16px; background: #F7F0E2; border-color: #EADCC0; }
+    .teach-live.on { display: flex; }
+    .teach-live > i { font-size: 24px; color: var(--warn); margin-top: 2px; }
+    .teach-live .it { font-size: 16px; font-weight: 600; }
+    .teach-live .is { font-size: 14px; color: var(--dim); margin-top: 3px; }
+    .teach-live .ra { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .teach-live select, .teach-live input { font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: #FFFFFF; color: var(--text); }
+    .teach-live input { display: none; }
+    .erow .es2 { text-align: right; font-size: 12px; color: var(--dim); margin-top: 2px; white-space: nowrap; }
+
+    /* Teach SmartPlug + system */
+    .rv { padding: 10px 0; border-top: 1px solid var(--line); }
+    .rv:first-child { border-top: none; }
+    .rv .rt { font-size: 14px; font-weight: 500; }
+    .rv .rs { font-size: 12px; color: var(--dim); margin-top: 3px; line-height: 1.4; }
+    .rv .ra { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .rv select, .rv input, .btn {
+      font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 8px;
+      border: 1px solid var(--line); background: #FFFFFF; color: var(--text);
+    }
+    .btn { cursor: pointer; background: var(--side); color: #FFFFFF; border-color: var(--side); padding: 7px 14px; }
+    .btn.ghost { background: transparent; color: var(--dim); border-color: var(--line); }
+    .btn:disabled { opacity: 0.5; cursor: default; }
+    .rv input { display: none; }
+    .msg { font-size: 13px; color: var(--dim); margin-top: 10px; min-height: 18px; line-height: 1.5; }
+    .msg.ok { color: var(--accent); }
+    .msg.bad { color: var(--bad); }
+    .hrow { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; font-size: 13px; border-top: 1px solid var(--line); }
+    .hrow:first-child { border-top: none; }
+    .hrow span:first-child { color: var(--dim); }
+    .hrow .good { color: var(--accent); font-weight: 500; }
+    .hrow .warn { color: var(--warn); font-weight: 500; }
+    .act .pt.anomaly { background: var(--warn); }
+    .act .ic.anomaly { background: #F5EBD9; color: var(--warn); }
+
+    /* ---------- Tablet and phone ---------- */
+    @media (max-width: 960px) {
+      .app { grid-template-columns: 1fr; }
+      .side { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 16px; }
+      .brand-sub { display: none; }
+      .nav { margin-top: 0; flex-direction: row; gap: 2px; order: 3; width: 100%; overflow-x: auto; }
+      .nav a { padding: 9px 12px; font-size: 14px; white-space: nowrap; }
+      .device { margin: 0 0 0 auto; padding: 8px 12px; }
+      .device .ico, .device .upd { display: none; }
+      .main { padding: 24px 16px 48px; }
+      .g-a, .g-c, .g-d, .g-e { grid-template-columns: 1fr; }
+      .g-b { grid-template-columns: repeat(2, 1fr); }
+      .meas { grid-template-columns: repeat(2, 1fr); row-gap: 18px; }
+      .meas > div:nth-child(3) { border-left: none; padding-left: 0; }
+      .hero-main { flex-direction: column; align-items: flex-start; }
+      .hero-art { inset: 0; opacity: 0; }
+      .hero-art.on { opacity: 0.25; }
+      .head h1 { font-size: 26px; }
+    }
+    @media (max-width: 520px) {
+      .main { padding: 20px 14px 40px; }
+      .head h1 { font-size: 24px; }
+      .head p { font-size: 15px; }
+      .hero-body, .load { padding: 20px; }
+      .hero-icon { width: 64px; height: 64px; font-size: 30px; }
+      .hero-w { font-size: 30px; }
+      .load-w { font-size: 38px; }
+      .stat { padding: 16px; }
+      .stat .v { font-size: 24px; }
+      .panel { padding: 18px 16px; }
+      .panel-head { flex-wrap: wrap; }
+      .tabs button { padding: 6px 10px; }
+      .chart-box { height: 210px; }
+      .meas .mv { font-size: 22px; }
+      .meas > div { padding: 2px 12px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .hero-art, .nav a, .tabs button { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div>
+        <div class="brand"><i class="ph ph-pulse"></i><span class="t">SmartPlug</span></div>
+        <div class="brand-sub">Home energy monitoring</div>
+      </div>
+      <nav class="nav">
+        <a href="#overview" class="active"><i class="ph ph-house"></i>Overview</a>
+        <a href="#live"><i class="ph ph-waveform"></i>Live</a>
+        <a href="#history"><i class="ph ph-clock"></i>History</a>
+        <a href="#energy"><i class="ph ph-lightning"></i>Energy</a>
+        <a href="#learn"><i class="ph ph-graduation-cap"></i>Teach</a>
+        <a href="#trends"><i class="ph ph-chart-bar"></i>Trends</a>
+      </nav>
+      <div class="device">
+        <div class="top">
+          <div class="ico"><i class="ph ph-plug"></i></div>
+          <div>
+            <div class="nm" id="dev-name">plug1</div>
+            <div class="st"><span class="dot" id="st-dot"></span><span id="st-text">Waiting</span></div>
+          </div>
+        </div>
+        <div class="upd" id="st-upd">Waiting for the first reading</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="inner">
+        <div class="head anchor" id="overview">
+          <h1 id="greet">Hello,</h1>
+          <p id="greet-sub">Waiting for your SmartPlug to report.</p>
+        </div>
+
+        <div class="card teach-live" id="teach-live">
+          <i class="ph ph-question"></i>
+          <div>
+            <div class="it" id="tl-title">SmartPlug does not recognise what is running</div>
+            <div class="is" id="tl-sub"></div>
+            <div class="ra" id="tl-form"></div>
+            <div class="msg" id="tl-msg"></div>
+          </div>
+        </div>
+
+        <div class="grid g-a">
+          <div class="card hero">
+            <div class="hero-art" id="hero-art"></div>
+            <div class="hero-body">
+              <div class="eyebrow" id="eyebrow">Current status</div>
+              <div class="hero-main">
+                <div class="hero-icon"><i class="ph ph-plug" id="hero-ic"></i></div>
+                <div>
+                  <div class="hero-name" id="name">Waiting for data</div>
+                  <div class="hero-w" id="hero-w">--</div>
+                  <div class="hero-sub" id="hero-sub">&nbsp;</div>
+                  <div class="status"><span class="dot" id="sdot"></span><span id="stext">Waiting</span><span class="conf" id="conf"></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card load">
+            <div class="k">Current load</div>
+            <div class="load-w" id="load-w">--</div>
+            <div class="load-kw" id="load-kw">&nbsp;</div>
+            <div class="load-foot"><i class="ph ph-trend-up"></i><span id="load-foot">Peak today: --</span></div>
+          </div>
+        </div>
+
+        <div class="grid g-b">
+          <div class="card stat">
+            <div class="lab"><i class="ph ph-lightning"></i>Energy today</div>
+            <div class="v" id="s-energy">--</div>
+            <div class="s" id="s-energy-sub">&nbsp;</div>
+          </div>
+          <div class="card stat">
+            <div class="lab"><i class="ph ph-coins"></i>Estimated cost</div>
+            <div class="v" id="s-cost">--</div>
+            <div class="s" id="s-cost-sub">&nbsp;</div>
+          </div>
+          <div class="card stat">
+            <div class="lab"><i class="ph ph-trend-up"></i>Peak load today</div>
+            <div class="v" id="s-peak">--</div>
+            <div class="s" id="s-peak-sub">&nbsp;</div>
+          </div>
+          <div class="card stat">
+            <div class="lab"><i class="ph ph-plugs"></i>Top appliance</div>
+            <div class="v" id="s-top" style="font-size:22px; margin-top:13px;">--</div>
+            <div class="s" id="s-top-sub">&nbsp;</div>
+          </div>
+        </div>
+
+        <div class="grid g-d">
+          <div class="card panel anchor" id="live">
+            <div class="panel-title"><i class="ph ph-waveform"></i>Electrical measurements</div>
+            <div class="meas">
+              <div><div class="ml">Voltage</div><div class="mv" id="m-v">--</div></div>
+              <div><div class="ml">Current</div><div class="mv" id="m-i">--</div></div>
+              <div><div class="ml">Frequency</div><div class="mv" id="m-hz">--</div></div>
+              <div><div class="ml">Power factor</div><div class="mv" id="m-pf">--</div></div>
+            </div>
+          </div>
+
+          <div class="card insight">
+            <i class="ph ph-lightbulb"></i>
+            <div>
+              <div class="it">Insight</div>
+              <div class="ib" id="ins-body">Usage insights appear once an appliance has run today.</div>
+              <div class="is" id="ins-sub">&nbsp;</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid g-c">
+          <div class="card panel anchor" id="trends">
+            <div class="panel-head">
+              <div class="panel-title"><i class="ph ph-chart-line"></i>Power usage</div>
+              <div class="k">Today</div>
+            </div>
+            <div class="chart-box">
+              <canvas id="power-chart"></canvas>
+              <div class="chart-empty" id="chart-empty">No readings logged for this period yet.</div>
+            </div>
+          </div>
+
+          <div class="card panel anchor" id="history">
+            <div class="panel-title"><i class="ph ph-clock-counter-clockwise"></i>Event timeline</div>
+            <div class="act-list" id="act-list"></div>
+          </div>
+        </div>
+
+        <div class="grid g-e">
+          <div class="card panel anchor" id="energy">
+            <div class="panel-head">
+              <div class="panel-title"><i class="ph ph-leaf"></i>Energy by appliance</div>
+              <div class="k">Power and current while running</div>
+            </div>
+            <div id="e-rows"></div>
+            <div class="etotal" id="e-total"></div>
+          </div>
+
+          <div class="card panel">
+            <div class="panel-title"><i class="ph ph-moon"></i>Standby</div>
+            <div class="side-block" id="sb-body">Loading...</div>
+            <div class="panel-title" style="margin-top:14px"><i class="ph ph-bell"></i>Alerts</div>
+            <div class="side-block" id="al-body">Loading...</div>
+          </div>
+        </div>
+
+        <div class="grid g-e">
+          <div class="card panel anchor" id="learn">
+            <div class="panel-head">
+              <div class="panel-title"><i class="ph ph-graduation-cap"></i>Teach SmartPlug</div>
+              <button class="btn" id="rv-train" type="button">Retrain model</button>
+            </div>
+            <div class="side-block"><span class="m">Runs SmartPlug was unsure about, least certain first. Name them, then retrain so it recognises them next time.</span></div>
+            <div id="rv-list"><div class="empty-note">Loading...</div></div>
+            <div class="msg" id="rv-msg"></div>
+          </div>
+
+          <div class="card panel">
+            <div class="panel-title"><i class="ph ph-shield-check"></i>System</div>
+            <div class="side-block" id="hl-body">Loading...</div>
+            <div style="margin-top:14px"><button class="btn ghost" id="mail-test" type="button">Send test email</button></div>
+            <div class="msg" id="mail-msg"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // If the Chart.js CDN is blocked or offline, keep the rest of the page working.
+    let chartMissing = false;
+    if (typeof Chart === 'undefined') {
+      chartMissing = true;
+      window.Chart = function () { this.data = { labels: [], datasets: [{}] }; this.options = { scales: { y: { ticks: {} } }, plugins: { tooltip: {} } }; this.update = function () {}; };
+      Chart.defaults = { font: {} };
+    }
+    const NAMES = {
+      iron: 'Iron', nothing_plugged: 'Nothing detected', iPhone: 'iPhone charger',
+      iPad: 'iPad charger', laptop: 'Laptop', blender: 'Blender', lightbulb: 'Lightbulb',
+      unknown: 'Unknown appliance', warming_up: 'Getting ready',
+    };
+    const INSIGHT_NAMES = {
+      iron: 'iron', laptop: 'laptop', blender: 'blender', lightbulb: 'lightbulb',
+      iPhone: 'iPhone charger', iPad: 'iPad charger', unknown: 'unidentified appliance',
+    };
+    const ICONS = {
+      iron: 'ph-thermometer-hot', nothing_plugged: 'ph-prohibit', iPhone: 'ph-device-mobile',
+      iPad: 'ph-device-tablet', laptop: 'ph-laptop', blender: 'ph-cooking-pot',
+      lightbulb: 'ph-lightbulb', unknown: 'ph-question', warming_up: 'ph-plug',
+    };
+    const nameOf = (l) => NAMES[l] || String(l).replace(/_/g, ' ');
+    const iconOf = (l) => ICONS[l] || 'ph-plug';
+
+    const ACCENT = '#527A70', DIM = '#66717C', WARN = '#A9762B', MUTED = '#B9C0C3';
+    const $ = (id) => document.getElementById(id);
+
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    async function post(url, body) {
+      try {
+        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'SmartPlug' }, body: JSON.stringify(body || {}) });
+        const j = await r.json().catch(() => ({}));
+        return { ok: r.ok && j.ok !== false, detail: j.detail || (r.ok ? 'Done.' : 'Request failed (' + r.status + ').') };
+      } catch (e) { return { ok: false, detail: 'Network error.' }; }
+    }
+    function setMsg(id, text, ok) { const el = $(id); el.textContent = text; el.className = 'msg ' + (ok === true ? 'ok' : ok === false ? 'bad' : ''); }
+
+    function fmtNum(w) { return w < 10 ? w.toFixed(1) : Math.round(w).toLocaleString('en-ZA').replace(/\s/g, ' '); }
+    function fmtWHtml(w) {
+      if (w >= 1000) return (w / 1000).toFixed(2) + '<span class="unit"> kW</span>';
+      return fmtNum(w) + '<span class="unit"> W</span>';
+    }
+    function fmtWText(w) { return w >= 1000 ? (w / 1000).toFixed(2) + ' kW' : fmtNum(w) + ' W'; }
+    function fmtDur(s) {
+      if (s === null || s === undefined) return 'unknown time';
+      if (s < 60) return 'under 1 min';
+      const m = Math.floor(s / 60);
+      if (m < 60) return m + ' min';
+      const h = Math.floor(m / 60), r = m % 60;
+      return r ? h + ' hr ' + r + ' min' : h + ' hr';
+    }
+
+    // ---------- Greeting ----------
+    (function greet() {
+      const h = new Date().getHours();
+      $('greet').textContent = h < 12 ? 'Good morning,' : h < 18 ? 'Good afternoon,' : 'Good evening,';
+    })();
+
+    // ---------- Sidebar nav ----------
+    document.querySelectorAll('.nav a').forEach((a) => {
+      a.addEventListener('click', () => {
+        document.querySelectorAll('.nav a').forEach((x) => x.classList.remove('active'));
+        a.classList.add('active');
+      });
+    });
+
+    // ---------- Optional Blender render behind the hero ----------
+    let artLabel = null;
+    function setArt(label) {
+      if (label === artLabel) return;
+      artLabel = label;
+      const url = '/static/renders/hero_' + label + '.jpg';
+      const img = new Image();
+      img.onload = () => { if (artLabel === label) { $('hero-art').style.backgroundImage = 'url(' + url + ')'; $('hero-art').classList.add('on'); } };
+      img.onerror = () => { if (artLabel === label) $('hero-art').classList.remove('on'); };
+      img.src = url;
+    }
+
+    // ---------- Power chart ----------
+    const range = 'today';
+    Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+    const powerChart = new Chart($('power-chart').getContext('2d'), {
+      type: 'line',
+      data: { labels: [], datasets: [{
+        data: [], borderColor: ACCENT, borderWidth: 2, tension: 0.35, fill: true,
+        pointRadius: 0, pointHoverRadius: 4, pointBackgroundColor: ACCENT, spanGaps: false,
+        backgroundColor: (ctx) => {
+          const a = ctx.chart.chartArea;
+          if (!a) return 'rgba(82,122,112,0.12)';
+          const g = ctx.chart.ctx.createLinearGradient(0, a.top, 0, a.bottom);
+          g.addColorStop(0, 'rgba(82,122,112,0.20)');
+          g.addColorStop(1, 'rgba(82,122,112,0.02)');
+          return g;
+        },
+      }]},
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#18232D', titleColor: '#FFFFFF', bodyColor: '#E9EEF1',
+            displayColors: false, padding: 10, cornerRadius: 8,
+          },
+        },
+        scales: {
+          x: { grid: { display: false }, border: { display: false }, ticks: { color: DIM, maxTicksLimit: 8, maxRotation: 0 } },
+          y: { beginAtZero: true, grid: { color: '#ECEEEC' }, border: { display: false }, ticks: { color: DIM, maxTicksLimit: 5 } },
+        },
+      },
+    });
+
+    async function loadPower() {
+      let d;
+      try { d = await (await fetch('/api/power?range=' + range)).json(); } catch (e) { return; }
+      const vals = d.values.filter((v) => v !== null);
+      $('chart-empty').style.display = (vals.length && !chartMissing) ? 'none' : 'flex';
+      if (chartMissing) $('chart-empty').textContent = 'The chart library could not be loaded (internet needed once for Chart.js).';
+      const maxV = vals.length ? Math.max(...vals) : 0;
+      const kw = maxV >= 1000;
+      const data = d.values.map((v) => (v === null ? null : (kw ? v / 1000 : v)));
+      const peakIdx = vals.length ? d.values.indexOf(maxV) : -1;
+      const ds = powerChart.data.datasets[0];
+      ds.data = data;
+      ds.pointRadius = data.map((_, i) => (i === peakIdx ? 4 : 0));
+      powerChart.data.labels = d.labels;
+      powerChart.options.scales.y.ticks.callback = (v) => (kw ? v.toFixed(1) + ' kW' : Math.round(v) + ' W');
+      powerChart.options.plugins.tooltip.callbacks = {
+        label: (c) => (c.parsed.y === null ? '' : (kw ? c.parsed.y.toFixed(2) + ' kW' : c.parsed.y.toFixed(1) + ' W')),
+      };
+      powerChart.update('none');
+    }
+    loadPower();
+    setInterval(loadPower, 30000);
+
+    // ---------- Energy analytics, standby, alerts ----------
+    const eRange = 'today';
+    async function loadAnalytics() {
+      let d;
+      try {
+        const res = await fetch('/api/usage?range=' + eRange);
+        if (!res.ok) {
+          let m = 'HTTP ' + res.status;
+          try { const j = await res.json(); if (j.error) m += ': ' + j.error; } catch (_) {}
+          throw new Error(m);
+        }
+        d = await res.json();
+      } catch (e) {
+        const msg = (e instanceof TypeError)
+          ? 'Request failed before reaching the server. If the rest of the page works, an ad blocker may be blocking it; allow this site.'
+          : 'Could not load usage (' + (e && e.message ? e.message : 'error') + '). Check the console running webapp.py.';
+        $('e-rows').innerHTML = '<div class="empty-note">' + esc(msg) + '</div>';
+        $('e-total').innerHTML = '';
+        $('sb-body').textContent = msg;
+        $('al-body').textContent = msg;
+        return;
+      }
+      try { renderEnergy(d); renderSide(d); }
+      catch (e) { console.error(e); $('e-rows').innerHTML = '<div class="empty-note">Display error: ' + esc(e.message) + '</div>'; }
+    }
+    function renderEnergy(d) {
+      const box = $('e-rows');
+      if (!d.rows.length) {
+        box.innerHTML = '<div class="empty-note">No appliance has run today yet.</div>';
+        $('e-total').innerHTML = '';
+        return;
+      }
+      const maxW = Math.max(...d.rows.map((r) => r.avg_w), 1e-9);
+      box.innerHTML = d.rows.map((r) => {
+        const pct = Math.max(2, Math.round(r.avg_w / maxW * 100));
+        return '<div class="erow">' +
+          '<div class="ic"><i class="ph ' + iconOf(r.label) + '"></i></div>' +
+          '<div><div class="nm">' + esc(nameOf(r.label)) + '</div><div class="ebar"><i style="width:' + pct + '%"></i></div></div>' +
+          '<div><div class="ev">' + fmtWText(r.avg_w) + ', ' + r.avg_a.toFixed(2) + ' A</div>' +
+          '<div class="es">peak ' + fmtWText(r.peak_w) + ', ' + r.peak_a.toFixed(2) + ' A</div>' +
+          '<div class="es2">' + fmtDur(r.seconds) + ', ' + r.kwh.toFixed(3) + ' kWh, R' + r.cost.toFixed(2) + '</div></div></div>';
+      }).join('');
+      $('e-total').innerHTML =
+        '<span>Total <b>' + d.totals.kwh.toFixed(2) + ' kWh</b></span>' +
+        '<span><b>R' + d.totals.cost.toFixed(2) + '</b> at R' + d.tariff.toFixed(2) + ' per kWh</span>' +
+        '<span><b>' + d.totals.co2.toFixed(2) + ' kg</b> CO2 at ' + d.co2_factor.toFixed(3) + ' kg per kWh</span>';
+    }
+    function renderSide(d) {
+      const sb = d.standby;
+      if (!sb.runs.length) {
+        $('sb-body').innerHTML = 'No standby draw detected in this period.<div class="m">Standby means a steady load between 0.3 W and 4 W for at least 30 min.</div>';
+      } else {
+        $('sb-body').innerHTML =
+          '<b>' + fmtDur(sb.minutes * 60) + '</b> of standby, ' + sb.kwh.toFixed(3) + ' kWh (R' + sb.cost.toFixed(2) + ')' +
+          '<ul>' + sb.runs.slice(0, 3).map((r) =>
+            '<li>' + r.start + ', ' + fmtDur(r.minutes * 60) + ' at ' + r.avg_w.toFixed(1) + ' W</li>').join('') + '</ul>';
+      }
+      const al = d.alerts;
+      $('al-body').innerHTML =
+        '<div>' + (al.channels.length ? 'Email alerts are on.' : 'Email is not set up. Alerts still appear in the timeline.') + '</div>' +
+        '<ul>' + al.rules.map((r) => '<li>' + r + '</li>').join('') + '</ul>';
+    }
+    loadAnalytics();
+    setInterval(loadAnalytics, 10000);
+
+
+    // ---------- Teach SmartPlug (active learning) ----------
+    async function loadReview() {
+      let d;
+      try { d = await (await fetch('/api/review')).json(); } catch (e) { return; }
+      const box = $('rv-list');
+      if (!d.items.length) {
+        box.innerHTML = '<div class="empty-note">Nothing to review. When SmartPlug is unsure about an appliance, it asks you here.</div>';
+        return;
+      }
+      const opts = '<option value="">Choose...</option>' + d.classes.map((c) => '<option value="' + esc(c) + '">' + esc(nameOf(c)) + '</option>').join('') + '<option value="__new">New appliance...</option>';
+      box.innerHTML = d.items.map((it) => {
+        const t = new Date(it.ts * 1000);
+        const when = t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + t.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false });
+        const guess = it.label ? 'guess: ' + esc(nameOf(it.label)) + (it.confidence != null ? ' (' + Math.round(it.confidence * 100) + '%)' : '') : 'no guess';
+        return '<div class="rv" data-id="' + it.id + '"><div class="rt">' + when + ', ' + fmtDur(it.duration_s) + ', about ' + fmtWText(it.watts || 0) + '</div>' +
+          '<div class="rs">' + guess + '</div><div class="ra"><select class="rv-sel">' + opts + '</select>' +
+          '<input class="rv-new" maxlength="24" placeholder="Name, e.g. Kettle">' +
+          '<button class="btn rv-save" type="button">Save</button><button class="btn ghost rv-skip" type="button">Skip</button></div></div>';
+      }).join('');
+    }
+    $('rv-list').addEventListener('change', (e) => {
+      if (!e.target.classList.contains('rv-sel')) return;
+      e.target.closest('.rv').querySelector('.rv-new').style.display = e.target.value === '__new' ? 'inline-block' : 'none';
+    });
+    $('rv-list').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const row = btn.closest('.rv');
+      const id = Number(row.dataset.id);
+      let body;
+      if (btn.classList.contains('rv-skip')) body = { event_id: id, skip: true };
+      else {
+        let label = row.querySelector('.rv-sel').value;
+        if (label === '__new') label = row.querySelector('.rv-new').value.trim();
+        if (!label) { setMsg('rv-msg', 'Choose or type a name first.', false); return; }
+        body = { event_id: id, label: label };
+      }
+      btn.disabled = true;
+      const r = await post('/api/label', body);
+      setMsg('rv-msg', r.detail, r.ok);
+      btn.disabled = false;
+      if (r.ok) loadReview();
+    });
+    $('rv-train').addEventListener('click', async () => {
+      const r = await post('/api/retrain');
+      setMsg('rv-msg', r.detail, r.ok);
+      loadHealth();
+    });
+    $('mail-test').addEventListener('click', async () => {
+      const r = await post('/api/alerts/test');
+      setMsg('mail-msg', r.ok ? 'Test email sent. Check the inbox and spam folder.' : 'Not sent: ' + r.detail, r.ok);
+    });
+
+    // ---------- System health ----------
+    let wasTraining = false;
+    async function loadHealth() {
+      let d;
+      try { d = await (await fetch('/api/health')).json(); } catch (e) { return; }
+      const row = (k, v, cls) => '<div class="hrow"><span>' + k + '</span><span class="' + (cls || '') + '">' + v + '</span></div>';
+      const age = d.last_reading_age;
+      $('hl-body').innerHTML =
+        row('Broker link', d.mqtt ? 'Connected' : 'Offline', d.mqtt ? 'good' : 'warn') +
+        row('Last reading', age === null ? 'None yet' : fmtDur(age) + ' ago', age !== null && age < 20 ? 'good' : 'warn') +
+        row('Bad readings rejected', d.rejected, d.rejected ? 'warn' : '') +
+        row('Unknown-appliance check', d.openset ? 'On' : 'Off', d.openset ? 'good' : 'warn') +
+        row('Password protection', d.password ? 'On' : 'Localhost only', d.password ? 'good' : 'warn') +
+        row('Email alerts', d.email ? 'On' : 'Not set up', d.email ? 'good' : 'warn') +
+        row('Events stored', d.events);
+      $('rv-train').disabled = d.retrain.running;
+      $('rv-train').textContent = d.retrain.running ? 'Retraining...' : 'Retrain model';
+      if (d.retrain.running) wasTraining = true;
+      else if (wasTraining) { wasTraining = false; loadReview(); }
+      if (d.retrain.last && d.retrain.running === false && $('rv-train').dataset.shown !== String(d.retrain.last.ts)) {
+        $('rv-train').dataset.shown = String(d.retrain.last.ts);
+        setMsg('rv-msg', d.retrain.last.message, d.retrain.last.ok);
+      }
+    }
+    loadReview(); loadHealth();
+    setInterval(loadReview, 30000);
+    setInterval(loadHealth, 4000);
+
+    // ---------- Sidebar connection status ----------
+    function setConn(state, age) {
+      const dot = $('st-dot');
+      if (state === 'live') {
+        dot.style.background = '#7FB3A2';
+        $('st-text').textContent = 'Connected';
+        $('st-upd').textContent = 'Last updated ' + Math.max(0, Math.round(age)) + ' seconds ago';
+      } else if (state === 'stale') {
+        dot.style.background = '#C98B82';
+        $('st-text').textContent = 'No data';
+        $('st-upd').textContent = age === null ? 'No readings received' : 'Last reading ' + fmtDur(age) + ' ago';
+      } else {
+        dot.style.background = '#93A1AB';
+        $('st-text').textContent = 'Waiting';
+        $('st-upd').textContent = 'Waiting for the first reading';
+      }
+    }
+
+    // ---------- Render ----------
+    function renderHero(d) {
+      const label = d.prediction, s = d.summary, r = d.reading;
+      const running = !['nothing_plugged', 'unknown', 'warming_up'].includes(label);
+      $('name').textContent = nameOf(label);
+      $('hero-ic').className = 'ph ' + iconOf(label);
+      $('eyebrow').textContent = running ? 'Currently running' : 'Current status';
+      $('hero-w').innerHTML = fmtWHtml(r.W);
+      setArt(label);
+
+      let sub = '';
+      if (label === 'nothing_plugged') sub = 'No active appliance detected.';
+      else if (label === 'unknown') sub = 'Not recognised. If it keeps running, SmartPlug will ask you to name it so it can learn it.';
+      else if (label === 'warming_up') sub = 'Collecting a few readings to identify the load.';
+      else sub = (s.on_seconds !== null && s.on_seconds !== undefined) ? 'Running for ' + fmtDur(s.on_seconds) : 'Detected just now';
+      $('hero-sub').textContent = sub || '\u00a0';
+
+      const dot = $('sdot');
+      if (running) { dot.style.background = ACCENT; $('stext').textContent = 'Detected'; }
+      else if (label === 'unknown') { dot.style.background = WARN; $('stext').textContent = 'Not identified'; }
+      else if (label === 'warming_up') { dot.style.background = MUTED; $('stext').textContent = 'Collecting data'; }
+      else { dot.style.background = MUTED; $('stext').textContent = 'Idle'; }
+      $('conf').textContent = (label === 'nothing_plugged' || label === 'warming_up' || label === 'unknown') ? '' : 'Confidence ' + Math.round(d.confidence * 100) + '%';
+    }
+
+    function renderStats(d) {
+      const s = d.summary, r = d.reading, tariff = d.tariff;
+      $('load-w').innerHTML = fmtWHtml(r.W);
+      $('load-kw').textContent = r.W >= 1000 ? '' : '\u2248 ' + (r.W / 1000).toFixed(2) + ' kW';
+      $('load-foot').textContent = s.peak_w > 0 ? 'Peak today: ' + fmtWText(s.peak_w) : 'No load recorded yet today';
+
+      $('s-energy').innerHTML = s.kwh.toFixed(2) + '<span class="unit"> kWh</span>';
+      $('s-energy-sub').textContent = (s.yesterday_kwh !== null && s.yesterday_kwh > 0.005)
+        ? 'Yesterday: ' + s.yesterday_kwh.toFixed(2) + ' kWh' : 'Since midnight';
+      $('s-cost').textContent = 'R' + (s.kwh * tariff).toFixed(2);
+      $('s-cost-sub').textContent = 'At R' + tariff.toFixed(2) + ' per kWh';
+      $('s-peak').innerHTML = s.peak_w > 0 ? fmtWHtml(s.peak_w) : '--';
+      $('s-peak-sub').textContent = s.peak_time ? 'At ' + s.peak_time : 'No load yet today';
+      if (s.top) {
+        $('s-top').textContent = nameOf(s.top.label);
+        $('s-top-sub').textContent = s.top.kwh < 0.005 ? 'Under 0.01 kWh today' : s.top.kwh.toFixed(2) + ' kWh today';
+      } else {
+        $('s-top').textContent = 'None yet';
+        $('s-top-sub').textContent = 'No appliance has run today';
+      }
+
+      $('m-v').innerHTML = r.V.toFixed(1) + '<span class="unit"> V</span>';
+      $('m-i').innerHTML = r.I.toFixed(3) + '<span class="unit"> A</span>';
+      $('m-hz').innerHTML = r.Hz.toFixed(1) + '<span class="unit"> Hz</span>';
+      $('m-pf').textContent = r.PF.toFixed(2);
+
+      if (s.top && s.top.kwh >= 0.005) {
+        const nm = INSIGHT_NAMES[s.top.label] || nameOf(s.top.label).toLowerCase();
+        $('ins-body').textContent = 'Your ' + nm + ' used ' + s.top.kwh.toFixed(2) + ' kWh today.';
+        $('ins-sub').textContent = 'That is about R' + (s.top.kwh * tariff).toFixed(2) + ' in electricity cost.';
+      } else {
+        $('ins-body').textContent = 'Usage insights appear once an appliance has run today.';
+        $('ins-sub').innerHTML = '&nbsp;';
+      }
+    }
+
+    function dayKey(d) { return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+
+    function renderEvents(events) {
+      const box = $('act-list');
+      if (!events || !events.length) {
+        box.innerHTML = '<div class="empty-note">Events appear here when an appliance is switched on, off, or changes power.</div>';
+        return;
+      }
+      const nowD = new Date();
+      const nowS = nowD.getTime() / 1000;
+      box.innerHTML = events.slice(0, 5).map((e) => {
+        const d = new Date(e.ts * 1000);
+        const hhmm = d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false });
+        const dateLine = dayKey(d) === dayKey(nowD) ? '' :
+          '<span>' + d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + '</span>';
+
+        if (e.type === 'ANOMALY') {
+          return '<div class="act">' +
+            '<div class="tm">' + hhmm + dateLine + '</div><div class="pt anomaly"></div>' +
+            '<div class="ic anomaly"><i class="ph ph-warning"></i></div>' +
+            '<div><div class="nm">Anomaly</div><div class="dt">' + esc(e.note) + '</div></div>' +
+            '<div class="pw">' + (e.label ? esc(nameOf(e.label)) : '') + '</div></div>';
+        }
+
+        if (e.type === 'ALERT') {
+          return '<div class="act">' +
+            '<div class="tm">' + hhmm + dateLine + '</div><div class="pt alert"></div>' +
+            '<div class="ic alert"><i class="ph ph-bell"></i></div>' +
+            '<div><div class="nm">Alert</div><div class="dt">' + esc(e.note) + '</div></div>' +
+            '<div class="pw">' + (e.label ? nameOf(e.label) : '') + '</div></div>';
+        }
+
+        const pending = !e.label && e.type !== 'OFF' && (nowS - e.ts) < 120;
+        const who = e.label ? nameOf(e.label) : (pending ? 'Appliance' : 'Unknown appliance');
+        const icon = pending ? 'ph-plug' : iconOf(e.label || 'unknown');
+
+        let title, detail, right, cls;
+        if (e.type === 'ON') {
+          title = who + ' turned on';
+          detail = pending ? 'Identifying appliance...' : fmtWText(e.post_w || 0) + ' steady';
+          right = '+' + fmtWText(Math.abs(e.delta_w || 0));
+          cls = 'on';
+        } else if (e.type === 'OFF') {
+          title = who + ' turned off';
+          detail = 'Ran for ' + fmtDur(e.duration_s) + (e.cycles ? ', ' + e.cycles + ' heating cycles' : '');
+          right = '-' + fmtWText(e.pre_w || 0);
+          cls = 'off';
+        } else {
+          title = who + ' power changed';
+          detail = (e.prev_label && e.label && e.prev_label !== e.label)
+            ? 'Changed from ' + nameOf(e.prev_label)
+            : (pending ? 'Identifying appliance...' : fmtWText(e.pre_w || 0) + ' to ' + fmtWText(e.post_w || 0));
+          right = ((e.delta_w || 0) >= 0 ? '+' : '-') + fmtWText(Math.abs(e.delta_w || 0));
+          cls = 'step';
+        }
+        if (e.note) detail += '. ' + esc(e.note);
+
+        return '<div class="act">' +
+          '<div class="tm">' + hhmm + dateLine + '</div><div class="pt ' + cls + '"></div>' +
+          '<div class="ic"><i class="ph ' + icon + '"></i></div>' +
+          '<div><div class="nm">' + title + '</div><div class="dt">' + detail + '</div></div>' +
+          '<div class="pw">' + right + '</div></div>';
+      }).join('');
+    }
+
+    // ---------- Live "what is this?" prompt ----------
+    let tlId = null, tlHold = 0;
+    function renderTeach(t) {
+      const box = $('teach-live');
+      if (!t) {
+        if (Date.now() < tlHold) return;          // keep the result message visible for a moment
+        box.classList.remove('on'); tlId = null; return;
+      }
+      box.classList.add('on');
+      $('tl-title').textContent = t.running ? 'SmartPlug does not recognise what is running' : 'SmartPlug did not recognise the last appliance';
+      $('tl-sub').textContent = (t.running ? 'Drawing about ' : 'It drew about ') + fmtWText(t.watts) + ' for ' + fmtDur(t.seconds) + '. What is it?';
+      if (tlId !== t.run_id) {                    // build the form once per run so typing is not wiped by polling
+        tlId = t.run_id;
+        $('tl-msg').textContent = '';
+        $('tl-form').innerHTML = '<select id="tl-sel"><option value="">Choose...</option>' +
+          (t.classes || []).map((c) => '<option value="' + esc(c) + '">' + esc(nameOf(c)) + '</option>').join('') +
+          '<option value="__new">New appliance...</option></select>' +
+          '<input id="tl-new" maxlength="24" placeholder="Name, e.g. Toaster">' +
+          '<button class="btn" id="tl-save" type="button">Save and learn</button>' +
+          '<button class="btn ghost" id="tl-skip" type="button">Not now</button>';
+      }
+    }
+    $('tl-form').addEventListener('change', (e) => {
+      if (e.target.id === 'tl-sel') $('tl-new').style.display = e.target.value === '__new' ? 'inline-block' : 'none';
+    });
+    $('tl-form').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (!btn || tlId === null) return;
+      let body;
+      if (btn.id === 'tl-skip') body = { run_id: tlId, skip: true };
+      else {
+        let label = $('tl-sel').value;
+        if (label === '__new') label = $('tl-new').value.trim();
+        if (!label) { setMsg('tl-msg', 'Choose or type a name first.', false); return; }
+        body = { run_id: tlId, label: label };
+      }
+      btn.disabled = true;
+      const r = await post('/api/teach_live', body);
+      btn.disabled = false;
+      if (btn.id === 'tl-skip' && r.ok) { tlHold = 0; $('teach-live').classList.remove('on'); return; }
+      setMsg('tl-msg', r.detail, r.ok);
+      if (r.ok) { tlHold = Date.now() + 8000; $('tl-form').innerHTML = ''; $('tl-title').textContent = 'Thanks'; $('tl-sub').textContent = ''; }
+    });
+
+    async function poll() {
+      let d;
+      try { d = await (await fetch('/status')).json(); } catch (e) { setConn('stale', null); return; }
+      renderTeach(d.teach);
+      if (!d.prediction) { setConn('waiting'); renderEvents(d.summary ? d.summary.events : []); return; }
+
+      setConn(d.age < 20 ? 'live' : 'stale', d.age);
+      $('greet-sub').textContent = d.age < 20
+        ? 'Your SmartPlug is monitoring your home.' : 'Your SmartPlug has stopped reporting.';
+      renderHero(d);
+      renderStats(d);
+      renderEvents(d.summary.events);
+    }
+    poll();
+    setInterval(poll, 2000);
+  </script>
+</body>
+</html>
