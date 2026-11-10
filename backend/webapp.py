@@ -1,7 +1,9 @@
 """
 Runs the live classifier, event detector, open-set check, anomaly detector,
-analytics, email alerts, the human-in-the-loop labelling flow AND the web
-dashboard in one process.
+drift monitor, analytics, email alerts, the human-in-the-loop labelling flow
+AND the web dashboard in one process.
+Run: python webapp.py --broker localhost
+Then open http://localhost:8000 in a browser.
 
 Run: python webapp.py --broker 192.168.10.241
 Then open http://localhost:8000 in a browser.
@@ -25,11 +27,16 @@ Files this needs in the same folder:
   static/dashboard.html
 (openset.pkl is created automatically if it is missing.)
 
+Optional, for drift detection: drift.py, edge_model.py and edge_stats.pkl
+(made by `python edge_model.py`). Without them the app runs, minus drift.
+Drift state is kept in drift_state.json; delete that file to reset it.
+
 Every classification is appended to live_log.csv. Detected events, alerts,
 anomalies and your labelling decisions are kept in smartplug.db, which is
 snapshotted daily into db_backups/.
 """
 import argparse
+import atexit
 import csv
 import hmac
 import json
@@ -60,6 +67,12 @@ from store import EventStore
 import analytics
 from alerts import AlertEngine, RULES, describe, send_alert, channels_configured
 
+try:
+    import drift
+except Exception as e:      # needs edge_model.py + scikit-learn; the app still works without drift detection
+    drift = None
+    print("Drift detection unavailable:", e)
+
 # Load .env from this script's folder, before any setting below is read.
 # Terminal environment variables win over the file (override=False).
 try:
@@ -87,6 +100,14 @@ ALERT_CHECK_S = 5           # how often alert rules are evaluated
 OFFLINE_S = 120             # no reading for this long = "sensor offline" alert
 RETRAIN_MIN_ACC = 0.85      # a retrained model is only adopted if its held-out accuracy is at least this
 REVIEW_DAYS = 30            # how far back the "please label this" queue looks
+
+# Drift detection (EWMA of per-class feature means vs the training baseline).
+EDGE_STATS_FILE = "edge_stats.pkl"
+DRIFT_FILE = "drift_state.json"
+DRIFT_ALPHA = 0.02          # ~50-window memory
+DRIFT_LIMIT = 2.5           # standard deviations from the training mean; raise it if you get false drift alerts
+DRIFT_EMAIL = False         # True = also email drift alerts (they always appear in the dashboard timeline)
+DRIFT_SAVE_S = 300          # how often the drift state is written to disk
 
 # Live teaching: while something is running and SmartPlug cannot identify it,
 # ask the person to name it once it has been "unknown" for this long.
@@ -132,6 +153,8 @@ store = EventStore(DB_FILE)
 detector = EventDetector()
 engine = AlertEngine(RULES)
 anomalies = anomaly.AnomalyDetector({})
+drift_mon = None                      # set by load_drift(); None = drift detection off
+drift_lock = threading.Lock()
 
 
 def load_models():
@@ -152,6 +175,30 @@ def load_models():
     with model_lock:
         models["clf"], models["openset"] = clf, stats
     anomalies.set_profiles(anomaly.build_profiles(TRAIN_CSV))
+
+
+def load_drift():
+    """Start the drift monitor from edge_stats.pkl. Leaves it off (None) if anything is missing."""
+    global drift_mon
+    if drift is None or not os.path.isfile(EDGE_STATS_FILE):
+        return
+    try:
+        mon = drift.DriftMonitor(joblib.load(EDGE_STATS_FILE), DRIFT_ALPHA, DRIFT_LIMIT)
+        mon.load(DRIFT_FILE)          # carries on from the last run; silently starts fresh if there is no file
+        with drift_lock:
+            drift_mon = mon
+    except Exception as e:
+        print("Drift detection disabled:", e)
+
+
+def save_drift():
+    if drift_mon is None:
+        return
+    try:
+        with drift_lock:
+            drift_mon.save(DRIFT_FILE)
+    except Exception as e:
+        print("Could not save drift state:", e)
 
 
 def to_display(pred, conf):
@@ -570,6 +617,17 @@ def on_message(client, userdata, msg):
             print("ANOMALY:", a["message"])
             deliver("ANOMALY", a["kind"], a["label"], a["message"], a["short"], a["ts"])
 
+        # Drift: slow change in an appliance's behaviour, tracked per class with an EWMA.
+        if drift_mon is not None:
+            window = list(device_windows.get(device_id, ()))
+            if len(window) == WINDOW_SIZE:
+                with drift_lock:
+                    drift_alerts = drift_mon.update(now, label, confidence, extract_features(window))
+                for a in drift_alerts:
+                    print("DRIFT:", a["message"])
+                    deliver("ANOMALY", a["kind"], a["label"], a["message"], a["short"], a["ts"],
+                            email=DRIFT_EMAIL)
+
         client.publish("nilm/plug1/result", json.dumps(
             {"device_id": device_id, "prediction": label, "confidence": round(confidence, 3)}
         ))
@@ -597,12 +655,15 @@ def start_mqtt(broker, port):
 
 
 # ---------- Alerts, anomalies, watchdog ----------
-def deliver(ev_type, rule, label, message, short, ts):
-    """Record in the timeline and send an email in the background."""
+def deliver(ev_type, rule, label, message, short, ts, email=True):
+    """Record in the timeline and (unless email=False) send an email in the background."""
     try:
         store.insert({"ts": ts, "type": ev_type, "label": label, "note": message})
     except Exception as e:
         print("Could not store alert:", e)
+
+    if not email:
+        return
 
     def _send():
         ok, detail = send_alert("SmartPlug: " + message, short=short)
@@ -612,6 +673,7 @@ def deliver(ev_type, rule, label, message, short, ts):
 
 
 def alert_loop():
+    last_save = time.time()
     while True:
         time.sleep(ALERT_CHECK_S)
         try:
@@ -634,6 +696,10 @@ def alert_loop():
             elif fresh and health["offline_alerted"]:
                 health["offline_alerted"] = False
                 deliver("ALERT", "sensor_online", None, "Sensor is reporting again.", "Sensor back online", now)
+
+            if drift_mon is not None and now - last_save >= DRIFT_SAVE_S:
+                last_save = now
+                save_drift()
         except Exception as e:
             print("alert loop error:", e)
 
@@ -873,10 +939,29 @@ def api_health():
         "events": store.count(),
         "classes": known_classes(),
         "openset": bool(stats),
+        "drift": drift_mon is not None,
         "email": "Email" in channels_configured(),
         "password": bool(DASH_PASS),
         "retrain": {"running": retrain_state["running"], "last": retrain_state["last"]},
     })
+
+
+@app.route("/api/drift")
+def api_drift():
+    """Current drift score per appliance (standard deviations from its training mean)."""
+    if drift_mon is None:
+        return jsonify({"enabled": False, "limit": DRIFT_LIMIT, "classes": []})
+    rows = []
+    with drift_lock:
+        warm = int(2 / drift_mon.alpha)
+        for c in drift_mon.ewma:
+            n = drift_mon.n.get(c, 0)
+            if n == 0:
+                continue
+            sc, name = drift_mon.score(c)
+            rows.append({"label": c, "score": round(sc, 2), "feature": name,
+                         "windows": n, "warming_up": n < warm})
+    return jsonify({"enabled": True, "limit": DRIFT_LIMIT, "classes": rows})
 
 
 @app.route("/api/review")
@@ -996,6 +1081,7 @@ def api_power():
 
 
 load_models()
+load_drift()
 
 
 if __name__ == "__main__":
@@ -1026,7 +1112,10 @@ if __name__ == "__main__":
     print("Dashboard:", "password protected" if DASH_PASS else "localhost only (set DASHBOARD_PASSWORD for phone access)")
     with model_lock:
         print("Open-set check:", "on" if models["openset"] else "off")
+    print("Drift detection:", f"on (limit {DRIFT_LIMIT} std devs)" if drift_mon is not None
+          else "off (needs drift.py, edge_model.py and edge_stats.pkl)")
 
+    atexit.register(save_drift)
     threading.Thread(target=start_mqtt, args=(args.broker, args.port), daemon=True).start()
     threading.Thread(target=alert_loop, daemon=True).start()
 

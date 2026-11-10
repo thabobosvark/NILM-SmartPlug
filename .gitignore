@@ -1,31 +1,9 @@
-﻿# Secrets
-.env
-
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-
-# Model artifacts
+﻿.env
+live_log.csv
+drift_state.json
 *.pkl
-models/
-
-# Databases
-*.db
-*.db-shm
-*.db-wal
-db_backups/
-
-# Backups
-backup_*/
-model_backups/
-
-# Logs
-*.log
-
-# OS / editor
-.DS_Store
-.vscode/
-.idea/
+*.tflite
+*.keras
+__pycache__/
+*.pyc
+edge_demo/

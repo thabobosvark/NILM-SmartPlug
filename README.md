@@ -1,467 +1,182 @@
-# NILM SmartPlug
+# NILM SmartPlug — IoT-Based Device Identification with Smart Plugs
 
-A low-cost, single-sensor prototype that identifies which appliance is plugged
-in and flags when it misbehaves, using nothing more than voltage, current,
-and power factor.
-The system is built on an ESP32 and a PZEM-004T energy sensor. It detects
-ON, OFF, and STEP events on-device using CUSUM, classifies each event,
-recognises unknown appliances through open-set recognition, and runs a
-per-class Mahalanobis anomaly check on-device. Results are published over
-MQTT and rendered on a live web dashboard.
-Built in South Africa, with prepaid electricity households in mind.
+A low-cost, fully local smart plug that measures the electrical signature of whatever is plugged into it, **names the appliance**, and shows its **running cost in rand (ZAR)**. No cloud services; everything runs on your own network.
+
+> Final-year project (DES371S, Industrial Computing Design Project 3), BEng Tech Computer Engineering, Cape Peninsula University of Technology. Author: Khuphuka Thabo Bosvark. Supervisor: Dr Angus Brandt.
+
+![Dashboard overview](docs/images/dashboard-overview.png)
 
 ---
 
-## Table of contents
+##  Safety warning — read first
 
-1. [Problem statement](#problem-statement)
-2. [How it works](#how-it-works)
-3. [Architecture](#architecture)
-4. [Hardware](#hardware)
-5. [Software stack](#software-stack)
-6. [Repository layout](#repository-layout)
-7. [Setup](#setup)
-8. [Running the system](#running-the-system)
-9. [Dataset](#dataset)
-10. [Models and anomaly detection](#models-and-anomaly-detection)
-11. [Dashboard](#dashboard)
-12. [Alerts](#alerts)
-13. [Tests](#tests)
-14. [Limitations](#limitations)
-15. [Future work](#future-work)
-16. [Licence](#licence)
+This is a **supervised bench prototype**. The PZEM-004T **V4.0** module has **no optocouplers**, so the sensor UART is **not galvanically isolated** from the 230 V mains. The Uno, the ESP32 and anything connected to their USB ports can be at mains potential once AC is connected.
+
+- Do **not** hand this to a consumer or leave it running unattended.
+- Wire with the power **off**, use an insulated test fixture, and touch nothing while mains is on.
+- The fix is a digital isolator on the UART line, or a sensor module with isolation built in (see [Future work](#future-work)).
+
+You build and run this at your own risk.
 
 ---
 
-## 1. Problem statement
+## The problem
 
-Per-appliance energy monitoring normally requires one smart plug per device.
-That is expensive, does not scale to a whole household, and produces a
-fragmented user experience.
-Non-intrusive load monitoring (NILM) aims to solve this by inferring which
-appliances are running from a single point of measurement. Most published
-NILM work assumes high sample rates, cloud inference, and closed-set
-classification. This project explores the opposite constraints:
-- One sensor
-- Low sample rate
-- Edge-native processing
-- Open-set classification
-- Anomaly detection on the same signal
-The target deployment context is a South African prepaid household where
-cost, connectivity, and privacy are all real constraints.
-In a prepaid household, the user already knows how much electricity they
-have left. The gap is knowing what is eating it. This project addresses that
-gap directly.
+A household bill is a single number. It doesn't say which appliance used what, and standby loads waste money unnoticed. Ordinary smart plugs show watts and kWh but can't tell which appliance is connected. Whole-house NILM systems can, but need expensive high-rate sensors at the electricity entry point.
 
----
+This project sits in between: a sensor at **one outlet** plus software that recognises the appliance from its signature. It is *NILM-inspired*, not true NILM.
 
-## 2. How it works
+## What it does
 
-The pipeline has five stages.
-**Stage 1. Sensing.**
-The PZEM-004T reports RMS voltage, RMS current, real power, power factor,
-frequency, and accumulated energy. The ESP32 polls it over Modbus RTU at
-roughly 8 Hz.  
-**Stage 2. Event detection.**
-A CUSUM detector runs on the power and power factor streams. It emits ON,
-OFF, and STEP events. ON and OFF use threshold plus hysteresis. STEP uses a
-two-sided CUSUM with adaptive thresholds based on the current power level.
-Heating loads such as the iron use a longer off-hold so thermostat cycles
-are not misread as real OFF events.  
-**Stage 3. Feature extraction.**
-Each event produces a feature vector: delta power, delta power factor, delta
-current, pre-event and post-event power and power factor, event duration,
-ramp rate, and steady-state variance. Twelve features in total.  
-**Stage 4. Classification.**
-Events are classified into one of the known appliance classes. The classifier
-is an ExtraTrees ensemble trained on hand-captured data. Classification runs
-server-side.  
-**Stage 5. Open-set and anomaly checks.**
-Events that are far from all known class distributions are flagged as
-unknown. Events that are close to a known class but statistically abnormal
-for that class are flagged as anomalies. The Mahalanobis check runs on the
-ESP32. The open-set check runs server-side.
-The ESP32 publishes only results over MQTT, never raw waveform data.
+- Measures voltage, current, power, power factor, frequency and energy (PZEM-004T V4.0 + CT clamp)
+- Identifies the appliance with an **Extra Trees** classifier on a 5-reading rolling window (12 features)
+- Flags **unknown appliances** with **Mahalanobis distance**, and lets the user name them on the **Teach SmartPlug** page (active learning, model retrains)
+- Detects **ON/OFF events** with **CUSUM** and logs the change in watts and runtime
+- Converts energy to **cost at R4.14/kWh** (City of Cape Town Domestic Block 1, incl. VAT; energy charge only)
+- Sends **email alerts** (SMTP) for an out-of-range load, an unknown appliance running too long, or a sensor that goes silent for 2 minutes
+- Validates every reading on the ESP32 (`V × I × PF ≈ P`) before publishing
 
----
+## Results
 
-## 3. Architecture
+| Criterion | Target | Result | Status |
+|---|---|---|---|
+| Classification quality | ≥ 90% macro F1 | **94.2% macro F1** (99.2% accuracy), stratified k-fold CV | (yes) |
+| Inference time | < 1.0 s | **0.121 s** | (yes) |
+| Responsiveness | Events visible within 15 s | 5–15 s | (yes) |
+| Build cost | < R1500 | **R680** out of pocket (R1444 total project value) | (yes) |
+| Alerts | Email on abnormal conditions | Abnormal-load, unknown-device and sensor-lost alerts | (yes) |
+| **Galvanic isolation** | Mains side isolated from logic | V4.0 has no optocouplers | (no) **Not met** |
+
+Tested on seven loads: laptop charger, iPad charger, iPhone charger, lightbulb, iron, blender and toaster. See [Limitations](#limitations) for what these numbers do and don't show.
+
+## Architecture
 
 ```
-
-Appliance
-
-|
-
-v
-
-PZEM-004T  --Modbus RTU-->  ESP32
-
-|
-
-+-- CUSUM event detection (on-device)
-
-+-- Feature extraction (on-device)
-
-+-- Mahalanobis anomaly check (on-device)
-
-|
-
-v
-
-MQTT (TLS)
-
-|
-
-v
-
-Backend (Python)
-
-|
-
-+-- Classifier (ExtraTrees)
-
-+-- Open-set recognition
-
-+-- Drift and collective anomaly checks
-
-+-- SQLite storage
-
-+-- Web dashboard
-
-+-- Email and Telegram alerts
-
+230 V outlet ─► appliance ─ CT clamp ─► PZEM-004T V4.0      (mains-referenced)
+                                              │ UART 9600, 5 V
+                                       Arduino Uno R3        (5 V sensor host)
+                                              │ UART through 10 kΩ / 22 kΩ divider (5 V → ~3.4 V)
+                                       ESP32-WROOM-32        (3.3 V, glitch filter, V×I×PF≈P check)
+                                              │ Wi-Fi · MQTT (JSON)
+                                       Mosquitto broker      (laptop)
+                                              │
+                                       Flask backend
+         5-reading window → 12 features → Mahalanobis (known?) → Extra Trees (which?) → CUSUM (events) → cost
+                                              │
+                                  Web dashboard · SMTP email alerts
 ```
-Classification runs on the server. Event detection and the Mahalanobis
-anomaly check run on the ESP32. End-to-end inference-on-chip is future work
-and is documented as such.
 
----
+![Architecture](docs/images/architecture.png)
 
-## 4. Hardware
+**Why two microcontrollers?** The ESP32's 5 V pin sat at about 4.3 V on USB power and starved the PZEM, so an Arduino Uno became the 5 V sensor host. The price: a second program, a second serial link, and the level shifter below.
 
-| Component | Notes |
+## Hardware
+
+**Parts:** PZEM-004T V4.0 with CT clamp, Arduino Uno R3, ESP-WROOM-32, 10 kΩ and 22 kΩ resistors, a test fixture, and household loads.
+
+| From | To | Note |
+|---|---|---|
+| PZEM 5V / GND | Uno 5V / GND | |
+| PZEM TX / RX | Uno D2 / D3 | SoftwareSerial via `PZEM004Tv30` |
+| Uno D11 (TX) | 10 kΩ → node → ESP32 GPIO16 (RX2) | Node = 22 kΩ to GND |
+| Uno GND | ESP32 GND | Common ground |
+
+Divider output: `5 V × 22 / (10 + 22) ≈ 3.44 V`, with about 0.16 mA through the divider.
+
+![Schematic](docs/images/schematic.png)
+![Prototype](docs/images/prototype-top.jpg)
+
+## Software
+
+| File | Role |
 |---|---|
-| ESP32 dev board | Any standard ESP32 module |
-| PZEM-004T v3.0 | 100 A version, Modbus RTU over UART |
-| 5 V supply | Powers ESP32 and PZEM |
-| Relay module | Optional, for switching |
-| Enclosure | Any mains-safe box |
-The bill of materials is under R400 at single-unit pricing. Full breakdown in
-the project report.
+| `backend/webapp.py` | Flask server, MQTT ingestion, dashboard API, alerts hook |
+| `backend/features.py` | Rolling window → 12 features (shared by training and live serving) |
+| `backend/train_model.py` | Trains and cross-validates the Extra Trees model |
+| `backend/openset.py` | Mahalanobis unknown-appliance detection |
+| `backend/events.py` | CUSUM ON/OFF event detection |
+| `backend/alerts.py` | SMTP alerts |
+| `backend/analytics.py` | Energy and cost calculations |
+| `backend/anomaly.py` | Learned normal range per appliance |
+| `backend/store.py` | SQLite storage |
+| `backend/collect_data.py` | Logs labelled readings to CSV |
+| `backend/demo_openset.py` | Demo of the unknown-appliance check |
+| `backend/tests.py` | Tests |
+| `backend/static/dashboard.html` | Web dashboard |
+| `firmware/ArduinoPZEM/` | Uno sketch: polls the PZEM, forwards readings |
+| `firmware/ESPARDUINO/` | ESP32 sketch: sanity check, glitch filter, MQTT publish |
 
----
+**MQTT:** the ESP32 publishes JSON to `nilm/plug1/reading` about every 7 s (`device_id`, `V`, `I`, `W`, `PF`, `Hz`, `kWh`).
 
-## 5. Software stack
+**Features (12):** latest V, I, W, PF; mean, std, min, max and range of power; mean and std of PF; delta W.
 
-- Python 3.10 or later
-- paho-mqtt for MQTT
-- pandas and numpy for data handling
-- scikit-learn for the classifier, feature importance, and covariance work
-- Flask for the dashboard
-- python-dotenv for configuration
-- joblib for model persistence
-- SQLite for local storage
+## Getting started
 
----
+### Prerequisites
+Python 3.10+, [Mosquitto](https://mosquitto.org/) MQTT broker, Arduino IDE (libraries: `PZEM004Tv30`, `PubSubClient`), and the hardware above.
 
-## 6. Repository layout
-
-```
-
-NILM-SmartPlug/
-
-├── .env.example           Environment variable template
-
-├── .gitignore
-
-├── README.md
-
-├── requirements.txt
-
-├── static/                Dashboard assets
-
-├── scripts/               All Python source
-
-│   ├── alerts.py          Rule-based alerts and email delivery
-
-│   ├── analytics.py       Per-appliance energy, cost, CO2, standby
-
-│   ├── anomaly.py         Percentile-band anomaly checks
-
-│   ├── collect\_data.py    MQTT capture script for building training data
-
-│   ├── demo\_openset.py    Held-out evaluation of open-set recognition
-
-│   ├── events.py          CUSUM event detector
-
-│   ├── features.py        Shared feature extraction
-
-│   ├── openset.py         Open-set recognition logic
-
-│   ├── store.py           SQLite storage layer
-
-│   ├── tests.py           Unit tests
-
-│   ├── train\_model.py     Model training and session split
-
-│   └── webapp.py          Dashboard and inference server
-
-└── data/
-
-├── training\_data.csv  Labelled training set
-
-├── live\_log.csv       Sample of live operation  
-
-└── images
-
-```
-
----
-
-## 7. Setup
-
-Clone the repository:
-
-```
-
-git clone git\@github.com:thabobosvark/NILM-SmartPlug.git
-
+### 1. Backend
+```powershell
+git clone https://github.com/thabobosvark/NILM-SmartPlug.git
 cd NILM-SmartPlug
-
-```
-Install dependencies:
-
-```
-
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-
+cd backend
+Copy-Item ..\.env.example .env      # then fill in your own values
 ```
-Copy the environment template and fill in your values:
+Never commit `.env`. It holds your SMTP app password, MQTT and dashboard credentials.
 
+### 2. Train the model
+Collect labelled data (one appliance at a time), then train:
+```powershell
+python collect_data.py
+python train_model.py
 ```
+`data/sample_readings.csv` shows the expected CSV format.
 
-cp .env.example .env
+### 3. Firmware
+Open each sketch in `firmware/`, replace the Wi-Fi and broker placeholders, then flash the Uno and the ESP32. Use the ESP32's **laptop LAN IP** as the broker address.
 
-```
-Required environment variables:
-| Variable | Purpose |
-|---|---|
-| SMTP\_USER | Gmail address used to send alerts |
-| SMTP\_APP\_PASSWORD | 16 character Google App Password |
-| ALERT\_EMAIL\_TO | Comma separated list of recipients |
-| SMTP\_SERVER | Defaults to smtp.gmail.com |
-| SMTP\_PORT | Defaults to 587 |
-| MQTT\_BROKER | Broker IP address |
-| MQTT\_PORT | 1883 for plain, 8883 for TLS |
-| MQTT\_USER | Broker username |
-| MQTT\_PASSWORD | Broker password |
-| MQTT\_TLS\_CA | Path to CA certificate if using TLS |
-| DASHBOARD\_PASSWORD | Password for the dashboard login |
-The** `.env` **file is gitignored. Never commit it.
-
----
-
-## 8. Running the system
-
-**Step 1. Capture training data.**
-With the ESP32 running and the broker reachable, plug in one appliance at a
-time and run:
-
-```
-
-cd scripts
-
-python collect\_data.py --label iron --duration 600
-
-```
-Repeat for each appliance and each state. The script appends to
-** `data/training\_data.csv`**.
-**Step 2. Train the model.**
-
-```
-
-python train\_model.py
-
-```
-This produces** `nilm\_model.pkl` **and prints per-class metrics using a
-session-based split. Sessions are kept whole so windows from the same
-recording do not appear in both training and test.
-**Step 3. Train the open-set layer.**
-
-```
-
-python demo\_openset.py
-
-```
-This holds out one class at a time, fits the open-set model on the
-remaining classes, and reports the fraction of held-out windows flagged as
-unknown, along with the false alarm rate on known classes.
-**Step 4. Start the dashboard.**
-
-```
-
+### 4. Run
+```powershell
 python webapp.py
-
 ```
-Open** `http://localhost:5000` **in a browser.
+Open `http://localhost:<PORT>` in your browser (the port is set in `webapp.py`).
 
----
+## Dashboard
 
-## 9. Dataset
+Overview · Live · History · Energy · Teach · Trends
 
-The dataset contains labelled captures from the following classes:
-- Blender
-- Laptop charger
-- Lightbulb
-- iPhone charger
-- iPad charger
-- Iron
-- Nothing plugged in
-Each capture session is recorded separately and labelled at capture time.
-Sessions are kept whole when splitting into train and test to prevent
-data leakage. An early result of 97 percent accuracy was discarded after
-discovering that near-duplicate windows from the same session were appearing
-in both train and test. The current reported figures come from a
-session-based split.
-The iron is the only thermostat-controlled appliance in the set. It cycles
-between heating and idle at roughly 20 to 60 second intervals depending on
-the dial setting. This is the cycling load used to demonstrate temporal
-modeling in the event detector and collective anomaly detection on the
-server.
-The iPhone and iPad chargers are the hardest pair to separate. They have
-nearly identical power draw and power factor. Harmonic features would be
-needed to separate them reliably, and this is noted as a limitation.
-The dataset is small and comes from a single household. It is included in
-the repo as** `data/training\_data.csv`**.
+![Teach SmartPlug](docs/images/teach-smartplug.png)
+![Alerts](docs/images/alert-emails.png)
 
----
+## Limitations
 
-## 10. Models and anomaly detection
+- Breadboard prototype, **not isolated from the mains**
+- Dataset collected by one person on one bench with seven appliances, so results may not carry over to other brands or models
+- Macro F1 (94.2%) is below accuracy (99.2%), so at least one smaller class is recognised less well. **Per-class results were not recorded.**
+- Windowed classification lags after a quick appliance swap (the window still holds the previous load's readings)
+- Readings were checked against appliance rated loads. A calibrated reference meter was used only once, early on.
+- One appliance per plug; no multi-appliance disaggregation
+- The campus network blocked MQTT, so testing used a mobile hotspot
 
-**Classifier.**
-An ExtraTrees ensemble trained on windowed feature vectors. Per-class F1 is
-reported rather than overall accuracy, because overall accuracy hides
-performance on the minority classes. The confusion matrix is included in
-the report.
-**Open-set layer.**
-Combines a softmax confidence threshold with a Mahalanobis distance from
-each class centroid and an autoencoder reconstruction error. The three
-signals are combined into a single unknown decision. The threshold is tuned
-on held-out classes so unknown detection and false alarm rate can be
-reported separately.
-**Anomaly layer.**
-A two-tier design.
-Tier 1 runs on the ESP32. It uses Mahalanobis distance per class on a
-reduced feature set. Feature reduction uses the ExtraTrees feature
-importances to select the top K continuous features, which keeps the
-covariance estimation stable on a small dataset and prevents the distance
-calculation from degrading under the curse of dimensionality. The inverse
-covariance matrix is computed offline and stored in flash. The on-device
-check is a few dozen multiplies.
-Tier 2 runs on the server. It covers collective anomaly detection over a
-rolling window of events, and EWMA-based drift detection of per-class
-feature means over days.
-Anomaly thresholds are calibrated to the 99th percentile of normal data.
-The reported metric is false positive rate per day, not raw accuracy.
-Anomalies for evaluation are synthesised by perturbing normal events by
-about 20 percent in power, extending duration by a factor of three, or
-cross-feeding one class into another class's model. There are no real
-recorded faults in the dataset.
+## Future work
 
----
+- Isolation on the sensor UART (digital isolator IC) or a sensor module with built-in isolation
+- Per-class confusion matrix and comparison against a calibrated meter
+- Reset the window on a CUSUM step event, and add a confidence cut-off for "unknown"
+- PCB and insulated enclosure
+- Concurrent multi-appliance disaggregation; local caching for network dropouts
 
-## 11. Dashboard
+## Experimental extras
 
-The dashboard is a Flask application served from** `scripts/webapp.py` **with
-static assets in** `static/`**. It shows:
-- Live power, current, and power factor
-- Event timeline with classifications and confidence
-- Unknown events with a label picker for the active learning loop
-- Per-appliance energy, cost, and CO2 for 1 day, 7 days, and 30 days
-- Standby waste summary
-- Anomaly log
-- Current model version
-The dashboard is password protected. Credentials are read from** `.env`**.
+`experimental/` holds side experiments that are **not part of the evaluated system**: an autoencoder anomaly model, drift monitoring and an int8 edge-model export. They need extra dependencies (e.g. TensorFlow).
 
----
+## Budget
 
-## 12. Alerts
+R680 out of pocket against a R1500 limit. The campus supplied the ESP32 and Arduino Uno, and a spare PZEM-004T was kept as a backup.
 
-Alerts are rule-based and configured in** `scripts/alerts.py`**. Each rule
-fires once per appliance run so the user is not spammed. Supported rule
-types:
--** `max\_on\_minutes`**: appliance has been on for at least N minutes
--** `quiet\_hours`**: appliance is on between two hours of the day
-Example rules in the default configuration:
-- Iron on for more than 5 minutes
-- Iron on between 22:00 and 05:00
-- Unknown appliance on for more than 3 minutes
-Alerts are delivered by email. Telegram and dashboard toasts are supported
-as additional channels.
+## Key references
 
----
-
-## 13. Tests
-
-Unit tests live in** `scripts/tests.py`**. They cover:
-- CUSUM event detection on synthetic ON, OFF, and STEP sequences
-- Feature extraction on known windows
-- Open-set scoring on held-out classes
-- Alert rule triggering and cooldown behaviour
-Run with:
-
-```
-
-cd scripts
-
-python tests.py
-
-```
-
----
-
-## 14. Limitations
-
-- The dataset is small and comes from a single household. Transfer to a
-new home is not guaranteed and would require retraining or domain
-adaptation.
-- The PZEM-004T reports RMS values only. There is no waveform-level data,
-which limits harmonic and transient-based discrimination.
-- The iPhone and iPad chargers are not reliably separable with the current
-feature set.
-- Anomalies for evaluation are synthesised by perturbing normal events.
-There are no real recorded faults in the dataset.
-- Classification runs on the server, not on the ESP32. Only event
-detection and the Mahalanobis check run on-device.
-- The system has not been tested against adversarial inputs. NILM systems
-are a new attack surface and adversarial robustness is not addressed.
-
----
-
-## 15. Future work
-
-- Waveform-level sampling with a current transformer and a high-speed ADC
-for harmonic and transient features. This is the single biggest lever
-for accuracy.
-- Panel-level disaggregation, moving from one plug to the main breaker.
-This is the classic NILM problem and the natural extension of this work.
-- Federated learning across multiple households to train a shared model
-without moving raw data. Each home trains locally and sends only model
-updates. This is the privacy-preserving deployment path.
-- A South African appliance dataset, which does not currently exist in
-public form.
-- On-device classifier inference with TensorFlow Lite Micro. The Mahalanobis
-check is already on-device, and this would complete the edge pipeline.
-- Formal privacy bounds on the MQTT stream. Right now the privacy story is
-a design choice. A differential privacy guarantee would be a real result.
-- Concept drift handling across seasons. A model trained in winter may not
-hold in summer when the appliance mix changes.
-
----
-
-## 16. Licence
-
-Released under the MIT Licence. See LICENSE for details.
-
-```
+Mpawenimana et al. (2018) moving-average preparation · Jitket (2022) smart-plug feature comparison · Geurts, Ernst & Wehenkel (2006) Extra Trees · Qu et al. (2013) CUSUM · OASIS MQTT v5.0
